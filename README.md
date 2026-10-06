@@ -1,55 +1,42 @@
 # Command Bindings
 
-A lightweight **client-side Fabric mod for Minecraft 1.21.1** that creates real command aliases.
+Client-side command aliases for Fabric 1.21.1.
 
-## Main syntax
-
-```text
-/customcommand /home alias /spawn
-```
-
-Now typing:
+## Create an alias
 
 ```text
-/home
+/customcommand /1 alias /tp mvcraft_
 ```
 
-sends:
+After creating it, simply use:
 
 ```text
-/spawn
+/1
 ```
 
-The slash is optional in both places:
+The mod changes the outgoing command from `1` to `tp mvcraft_` before it is sent, so the alias does not need to exist on the server.
+
+Arguments can be appended:
 
 ```text
-/customcommand home alias spawn
+/1 Steve
 ```
 
-Arguments are supported:
+becomes:
 
 ```text
-/customcommand /rtp alias /rtp world
+/tp mvcraft_ Steve
 ```
 
-Then `/rtp` runs `/rtp world`.
-
-## Management
+## Other commands
 
 ```text
 /customcommand list
-/customcommand remove /home
+/customcommand remove /1
+/bind /1 /tp mvcraft_
 ```
 
-There is also a shorter form:
-
-```text
-/bind /home /spawn
-```
-
-All aliases are stored in `.minecraft/config/command-bindings.json`.
-
-The mod is client-side only and does not bypass server permissions; the target command is sent normally to the connected server.
+Binds are saved in `.minecraft/config/command-bindings.json`.
 
 ## Compatibility
 
@@ -58,3 +45,5 @@ The mod is client-side only and does not bypass server permissions; the target c
 - Java 21
 - Fabric API 0.116.1+1.21.1
 - Fabric Loader 0.16.7+
+
+Client-side only.
