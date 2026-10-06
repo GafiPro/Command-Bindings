@@ -6,37 +6,37 @@ import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandManager;
 import net.fabricmc.fabric.api.client.command.v2.ClientCommandRegistrationCallback;
 import net.fabricmc.fabric.api.client.command.v2.FabricClientCommandSource;
-import net.minecraft.client.MinecraftClient;
+import net.fabricmc.fabric.api.client.message.v1.ClientSendMessageEvents;
 import net.minecraft.text.Text;
 
 import static com.mojang.brigadier.arguments.StringArgumentType.getString;
 
 public final class CommandBindingsClient implements ClientModInitializer {
-    private static CommandDispatcher<FabricClientCommandSource> dispatcher;
+    private static final String CREATE_SEPARATOR = " alias ";
 
     @Override
     public void onInitializeClient() {
         BindStore.load();
 
-        ClientCommandRegistrationCallback.EVENT.register((commandDispatcher, registryAccess) -> {
-            dispatcher = commandDispatcher;
-            registerManagementCommands(commandDispatcher);
-            BindStore.getBinds().keySet().forEach(alias -> registerAlias(commandDispatcher, alias));
-        });
+        ClientCommandRegistrationCallback.EVENT.register((commandDispatcher, registryAccess) ->
+            registerManagementCommand(commandDispatcher)
+        );
+
+        ClientSendMessageEvents.MODIFY_COMMAND.register(CommandBindingsClient::rewriteCommand);
     }
 
-    private static void registerManagementCommands(CommandDispatcher<FabricClientCommandSource> commandDispatcher) {
-        commandDispatcher.register(
+    private static void registerManagementCommand(CommandDispatcher<FabricClientCommandSource> dispatcher) {
+        dispatcher.register(
             ClientCommandManager.literal("customcommand")
                 .then(ClientCommandManager.argument("definition", StringArgumentType.greedyString())
                     .executes(context -> handleCustomCommand(
                         context.getSource(), getString(context, "definition"))))
         );
 
-        commandDispatcher.register(
+        dispatcher.register(
             ClientCommandManager.literal("bind")
                 .then(ClientCommandManager.argument("definition", StringArgumentType.greedyString())
-                    .executes(context -> handleShortBind(
+                    .executes(context -> handleBind(
                         context.getSource(), getString(context, "definition"))))
         );
     }
@@ -52,18 +52,18 @@ public final class CommandBindingsClient implements ClientModInitializer {
             return removeAlias(source, input.substring(7).trim());
         }
 
-        int separator = input.toLowerCase().indexOf(" alias ");
+        int separator = indexOfAliasSeparator(input);
         if (separator < 0) {
             source.sendFeedback(Text.literal("§cUsage: /customcommand /alias alias /command [arguments]"));
             return 0;
         }
 
-        String alias = normalizeAlias(input.substring(0, separator).trim());
-        String command = normalizeCommand(input.substring(separator + 7).trim());
+        String alias = normalizeAlias(input.substring(0, separator));
+        String command = normalizeCommand(input.substring(separator + CREATE_SEPARATOR.length()));
         return createOrUpdateAlias(source, alias, command);
     }
 
-    private static int handleShortBind(FabricClientCommandSource source, String definition) {
+    private static int handleBind(FabricClientCommandSource source, String definition) {
         String input = definition.trim();
         int separator = input.indexOf(" ");
 
@@ -72,16 +72,14 @@ public final class CommandBindingsClient implements ClientModInitializer {
             return 0;
         }
 
-        String alias = normalizeAlias(input.substring(0, separator).trim());
-        String command = normalizeCommand(input.substring(separator + 1).trim());
+        String alias = normalizeAlias(input.substring(0, separator));
+        String command = normalizeCommand(input.substring(separator + 1));
         return createOrUpdateAlias(source, alias, command);
     }
 
     private static int createOrUpdateAlias(FabricClientCommandSource source, String alias, String command) {
         if (!isValidAlias(alias)) {
-            source.sendFeedback(
-                Text.literal("§cInvalid alias. Use letters, numbers, \".\", \"_\" or \"-\".")
-            );
+            source.sendFeedback(Text.literal("§cInvalid alias. Use letters, numbers, ".", "_" or "-"."));
             return 0;
         }
 
@@ -91,7 +89,6 @@ public final class CommandBindingsClient implements ClientModInitializer {
         }
 
         boolean replaced = BindStore.put(alias, command);
-        registerAlias(getDispatcher(), alias);
 
         source.sendFeedback(
             Text.literal((replaced ? "§eUpdated" : "§aCreated")
@@ -128,40 +125,26 @@ public final class CommandBindingsClient implements ClientModInitializer {
         return 1;
     }
 
-    private static CommandDispatcher<FabricClientCommandSource> getDispatcher() {
-        if (dispatcher == null) {
-            throw new IllegalStateException("Command dispatcher is not active yet.");
+    private static String rewriteCommand(String command) {
+        String input = command.trim();
+        if (input.isEmpty()) {
+            return command;
         }
-        return dispatcher;
+
+        int firstSpace = input.indexOf(" ");
+        String alias = firstSpace < 0 ? input : input.substring(0, firstSpace);
+        String remainder = firstSpace < 0 ? "" : input.substring(firstSpace);
+
+        String target = BindStore.get(normalizeAlias(alias));
+        if (target == null || target.isBlank()) {
+            return command;
+        }
+
+        return target + remainder;
     }
 
-    private static void registerAlias(CommandDispatcher<FabricClientCommandSource> commandDispatcher, String alias) {
-        if (commandDispatcher.getRoot().getChild(alias) != null) {
-            return;
-        }
-
-        commandDispatcher.register(
-            ClientCommandManager.literal(alias)
-                .executes(context -> executeAlias(context.getSource(), alias))
-        );
-    }
-
-    private static int executeAlias(FabricClientCommandSource source, String alias) {
-        String command = BindStore.get(alias);
-
-        if (command == null || command.isBlank()) {
-            source.sendFeedback(Text.literal("§cNo command is configured for §f/" + alias + "§c."));
-            return 0;
-        }
-
-        MinecraftClient client = MinecraftClient.getInstance();
-        if (client.getNetworkHandler() == null) {
-            source.sendFeedback(Text.literal("§cYou are not connected to a world/server."));
-            return 0;
-        }
-
-        client.getNetworkHandler().sendChatCommand(command);
-        return 1;
+    private static int indexOfAliasSeparator(String input) {
+        return input.toLowerCase(java.util.Locale.ROOT).indexOf(CREATE_SEPARATOR);
     }
 
     private static boolean isValidAlias(String alias) {
