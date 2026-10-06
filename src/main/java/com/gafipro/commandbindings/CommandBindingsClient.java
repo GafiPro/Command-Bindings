@@ -80,7 +80,7 @@ public final class CommandBindingsClient implements ClientModInitializer {
     private static int createOrUpdateAlias(FabricClientCommandSource source, String alias, String command) {
         if (!isValidAlias(alias)) {
             source.sendFeedback(
-                Text.literal("§cInvalid alias. Use letters, numbers, ".", "_" or "-".")
+                Text.literal("§cInvalid alias. Use letters, numbers, \".\", \"_\" or \"-\".")
             );
             return 0;
         }
