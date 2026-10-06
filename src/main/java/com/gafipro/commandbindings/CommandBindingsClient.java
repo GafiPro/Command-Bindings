@@ -28,92 +28,104 @@ public final class CommandBindingsClient implements ClientModInitializer {
     private static void registerManagementCommands(CommandDispatcher<FabricClientCommandSource> commandDispatcher) {
         commandDispatcher.register(
             ClientCommandManager.literal("customcommand")
-                .then(ClientCommandManager.literal("list")
-                    .executes(context -> {
-                        if (BindStore.getBinds().isEmpty()) {
-                            context.getSource().sendFeedback(Text.literal("§7Command Bindings: §fNo aliases configured."));
-                            return 0;
-                        }
-
-                        context.getSource().sendFeedback(Text.literal("§7Command Bindings:"));
-                        BindStore.getBinds().forEach((alias, command) ->
-                            context.getSource().sendFeedback(
-                                Text.literal("§8/§b" + alias + " §7-> §f/" + command)
-                            )
-                        );
-                        return BindStore.getBinds().size();
-                    }))
-                .then(ClientCommandManager.literal("remove")
-                    .then(ClientCommandManager.argument("alias", StringArgumentType.word())
-                        .executes(context -> {
-                            String alias = normalizeAlias(getString(context, "alias"));
-
-                            if (BindStore.remove(alias)) {
-                                context.getSource().sendFeedback(
-                                    Text.literal("§aRemoved command alias §f/" + alias + "§a.")
-                                );
-                            } else {
-                                context.getSource().sendFeedback(
-                                    Text.literal("§cNo command alias exists for §f/" + alias + "§c.")
-                                );
-                            }
-                            return 1;
-                        })))
-                .then(ClientCommandManager.argument("alias", StringArgumentType.word())
-                    .then(ClientCommandManager.literal("alias")
-                        .then(ClientCommandManager.argument("command", StringArgumentType.greedyString())
-                            .executes(context -> {
-                                String alias = normalizeAlias(getString(context, "alias"));
-                                String command = normalizeCommand(getString(context, "command"));
-
-                                if (!isValidAlias(alias)) {
-                                    context.getSource().sendFeedback(
-                                        Text.literal("§cInvalid alias. Use letters, numbers, ".", "_" or "-".")
-                                    );
-                                    return 0;
-                                }
-
-                                if (command.isEmpty()) {
-                                    context.getSource().sendFeedback(
-                                        Text.literal("§cThe target command cannot be empty.")
-                                    );
-                                    return 0;
-                                }
-
-                                boolean replaced = BindStore.put(alias, command);
-                                registerAlias(getDispatcher(), alias);
-
-                                context.getSource().sendFeedback(
-                                    Text.literal((replaced ? "§eUpdated" : "§aCreated")
-                                        + " §f/" + alias + " §7-> §f/" + command)
-                                );
-                                return 1;
-                            }))));
+                .then(ClientCommandManager.argument("definition", StringArgumentType.greedyString())
+                    .executes(context -> handleCustomCommand(
+                        context.getSource(), getString(context, "definition"))))
+        );
 
         commandDispatcher.register(
             ClientCommandManager.literal("bind")
-                .then(ClientCommandManager.argument("alias", StringArgumentType.word())
-                    .then(ClientCommandManager.argument("command", StringArgumentType.greedyString())
-                        .executes(context -> {
-                            String alias = normalizeAlias(getString(context, "alias"));
-                            String command = normalizeCommand(getString(context, "command"));
+                .then(ClientCommandManager.argument("definition", StringArgumentType.greedyString())
+                    .executes(context -> handleShortBind(
+                        context.getSource(), getString(context, "definition"))))
+        );
+    }
 
-                            if (!isValidAlias(alias) || command.isEmpty()) {
-                                context.getSource().sendFeedback(
-                                    Text.literal("§cUsage: /bind /alias /command [arguments]")
-                                );
-                                return 0;
-                            }
+    private static int handleCustomCommand(FabricClientCommandSource source, String definition) {
+        String input = definition.trim();
 
-                            boolean replaced = BindStore.put(alias, command);
-                            registerAlias(getDispatcher(), alias);
+        if (input.equalsIgnoreCase("list")) {
+            return listAliases(source);
+        }
 
-                            context.getSource().sendFeedback(
-                                Text.literal((replaced ? "§eUpdated" : "§aCreated")
-                                    + " §f/" + alias + " §7-> §f/" + command)
-                            );
-                            return 1;
-                        }))));
+        if (input.regionMatches(true, 0, "remove ", 0, 7)) {
+            return removeAlias(source, input.substring(7).trim());
+        }
+
+        int separator = input.toLowerCase().indexOf(" alias ");
+        if (separator < 0) {
+            source.sendFeedback(Text.literal("§cUsage: /customcommand /alias alias /command [arguments]"));
+            return 0;
+        }
+
+        String alias = normalizeAlias(input.substring(0, separator).trim());
+        String command = normalizeCommand(input.substring(separator + 7).trim());
+        return createOrUpdateAlias(source, alias, command);
+    }
+
+    private static int handleShortBind(FabricClientCommandSource source, String definition) {
+        String input = definition.trim();
+        int separator = input.indexOf(" ");
+
+        if (separator < 0) {
+            source.sendFeedback(Text.literal("§cUsage: /bind /alias /command [arguments]"));
+            return 0;
+        }
+
+        String alias = normalizeAlias(input.substring(0, separator).trim());
+        String command = normalizeCommand(input.substring(separator + 1).trim());
+        return createOrUpdateAlias(source, alias, command);
+    }
+
+    private static int createOrUpdateAlias(FabricClientCommandSource source, String alias, String command) {
+        if (!isValidAlias(alias)) {
+            source.sendFeedback(
+                Text.literal("§cInvalid alias. Use letters, numbers, ".", "_" or "-".")
+            );
+            return 0;
+        }
+
+        if (command.isEmpty()) {
+            source.sendFeedback(Text.literal("§cThe target command cannot be empty."));
+            return 0;
+        }
+
+        boolean replaced = BindStore.put(alias, command);
+        registerAlias(getDispatcher(), alias);
+
+        source.sendFeedback(
+            Text.literal((replaced ? "§eUpdated" : "§aCreated")
+                + " §f/" + alias + " §7-> §f/" + command)
+        );
+        return 1;
+    }
+
+    private static int listAliases(FabricClientCommandSource source) {
+        if (BindStore.getBinds().isEmpty()) {
+            source.sendFeedback(Text.literal("§7Command Bindings: §fNo aliases configured."));
+            return 0;
+        }
+
+        source.sendFeedback(Text.literal("§7Command Bindings:"));
+        BindStore.getBinds().forEach((alias, command) ->
+            source.sendFeedback(Text.literal("§8/§b" + alias + " §7-> §f/" + command))
+        );
+        return BindStore.getBinds().size();
+    }
+
+    private static int removeAlias(FabricClientCommandSource source, String rawAlias) {
+        String alias = normalizeAlias(rawAlias);
+        if (!isValidAlias(alias)) {
+            source.sendFeedback(Text.literal("§cUsage: /customcommand remove /alias"));
+            return 0;
+        }
+
+        if (BindStore.remove(alias)) {
+            source.sendFeedback(Text.literal("§aRemoved command alias §f/" + alias + "§a."));
+        } else {
+            source.sendFeedback(Text.literal("§cNo command alias exists for §f/" + alias + "§c."));
+        }
+        return 1;
     }
 
     private static CommandDispatcher<FabricClientCommandSource> getDispatcher() {
