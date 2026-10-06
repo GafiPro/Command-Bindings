@@ -1,0 +1,22 @@
+{
+  "schemaVersion": 1,
+  "id": "command-bindings",
+  "version": "\${version}",
+  "name": "Command Bindings",
+  "description": "Create client-side command aliases such as /home -> /spawn.",
+  "authors": [
+    "GafiPro"
+  ],
+  "environment": "client",
+  "entrypoints": {
+    "client": [
+      "com.gafipro.commandbindings.CommandBindingsClient"
+    ]
+  },
+  "depends": {
+    "fabricloader": ">=0.16.7",
+    "minecraft": "~1.21.1",
+    "java": ">=21",
+    "fabric-api": "*"
+  }
+}
