@@ -1,7 +1,7 @@
 {
   "schemaVersion": 1,
   "id": "command-bindings",
-  "version": "\${version}",
+  "version": "${version}",
   "name": "Command Bindings",
   "description": "Create client-side command aliases such as /home -> /spawn.",
   "authors": [
